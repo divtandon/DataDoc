@@ -13,6 +13,10 @@ GENERATORS = {
 
 
 def main() -> None:
+    # Windows consoles default stdout to cp1252, which can't encode characters
+    # Claude sometimes uses in its summaries (arrows, em dashes, ...).
+    sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         prog="datadoc",
         description="Generate production data code from live DataHub metadata.",
