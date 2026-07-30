@@ -9,22 +9,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 EXAMPLES_DIR = ROOT_DIR / "examples"
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DATAHUB_MCP_URL = os.environ.get("DATAHUB_MCP_URL", "")
 DATAHUB_MCP_TOKEN = os.environ.get("DATAHUB_MCP_TOKEN", "")
-MODEL = os.environ.get("DATADOC_MODEL", "claude-sonnet-5")
+MODEL = os.environ.get("DATADOC_MODEL", "")
 
 
 def require_config() -> None:
-    missing = [
-        name
-        for name, value in [
-            ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
-            ("DATAHUB_MCP_URL", DATAHUB_MCP_URL),
-        ]
-        if not value
-    ]
-    if missing:
+    if not DATAHUB_MCP_URL:
         raise RuntimeError(
-            f"Missing required env vars: {', '.join(missing)}. Copy .env.example to .env and fill them in."
+            "Missing required env var: DATAHUB_MCP_URL. Copy .env.example to .env and fill it in."
         )

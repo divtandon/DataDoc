@@ -12,33 +12,56 @@ it's confident is PII), so the next person or agent inherits what it found.
 
 ## How it works
 
-A single Claude tool-use loop (`agent/core.py`) is handed two sets of tools:
-DataHub's own MCP tools (search, schema, lineage, tagging, ...) and one
-local `write_file` tool. The model decides what to look up and when, then
-writes the generated code to disk. See [docs/architecture.md](docs/architecture.md)
-for the full picture.
+DataDoc drives the local **Claude Code CLI** via the Claude Agent SDK
+(`agent/core.py`), with the DataHub MCP server wired in as a tool source.
+The model decides what to look up and when, then writes the generated code
+to disk with Claude Code's built-in `Write` tool. This rides on your
+existing Claude Code/Pro subscription auth — no separate metered API key
+needed. See [docs/architecture.md](docs/architecture.md) for the full
+picture.
 
 ```
-CLI ──▶ agent/generators/*.py ──▶ agent/core.py (tool-use loop)
+CLI ──▶ agent/generators/*.py ──▶ agent/core.py (claude_agent_sdk.query)
                                         │
                                         ├── DataHub MCP Server (schema, lineage, write-back)
-                                        └── local write_file tool
+                                        └── Claude Code's built-in Write tool
 ```
 
 ## Setup
 
-Requires Python 3.11+.
+Requires Python 3.11+ and the [Claude Code CLI](https://claude.com/claude-code)
+installed and logged in (`claude login`) with an active Pro/Max
+subscription.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-cp .env.example .env        # fill in ANTHROPIC_API_KEY, DATAHUB_MCP_URL, DATAHUB_MCP_TOKEN
+cp .env.example .env        # fill in DATAHUB_MCP_URL, DATAHUB_MCP_TOKEN
 ```
 
 `DATAHUB_MCP_URL` is your DataHub instance's MCP endpoint (DataHub Cloud
 exposes this at `https://<tenant>.acryl.io/api/mcp`; self-hosted setups
 follow the [MCP Server docs](https://docs.datahub.com)).
+
+### Local self-hosted DataHub
+
+No DataHub instance handy? Spin one up locally:
+
+```bash
+pip install acryl-datahub
+datahub docker quickstart
+
+# seed a couple of realistic sample datasets (the built-in
+# `datahub docker ingest-sample-data` is broken in some CLI versions)
+python scripts/seed_local_sample_data.py
+
+# in a separate terminal: mint a local token and start the MCP server
+python scripts/run_local_datahub_mcp.py
+```
+
+Then set `DATAHUB_MCP_URL=http://127.0.0.1:8000/mcp` in `.env` (no token
+needed there — the local MCP HTTP transport isn't itself authenticated).
 
 ## Usage
 
@@ -56,16 +79,18 @@ file landed.
 ```
 DataDoc/
 ├── agent/
-│   ├── core.py                # Claude tool-use loop (MCP tools + local tools)
-│   ├── datahub_mcp_client.py  # MCP session against the DataHub MCP Server
+│   ├── core.py                # claude_agent_sdk query() wired to the DataHub MCP server
 │   ├── config.py
-│   ├── prompts/               # system prompt + codegen template
-│   └── generators/            # dbt / airflow / migration generators
-├── cli.py                     # entrypoint
-├── examples/                  # sample generated artifacts
+│   ├── prompts/                # system prompt + codegen template
+│   └── generators/             # dbt / airflow / migration generators
+├── cli.py                      # entrypoint
+├── scripts/
+│   ├── run_local_datahub_mcp.py  # bootstrap the MCP server against a local quickstart
+│   └── seed_local_sample_data.py # seed sample datasets for local dev
+├── examples/                   # sample generated artifacts
 ├── tests/
 ├── docs/architecture.md
-└── demo/script.md             # shot list for the submission video
+└── demo/script.md              # shot list for the submission video
 ```
 
 ## Status
