@@ -28,7 +28,7 @@ def mcp_tools_to_anthropic_schema(list_tools_result) -> list[dict]:
         {
             "name": tool.name,
             "description": tool.description or "",
-            "input_schema": tool.inputSchema,
+            "input_schema": tool.input_schema,
         }
         for tool in list_tools_result.tools
     ]
