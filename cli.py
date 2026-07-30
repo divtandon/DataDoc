@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from agent.generators.airflow_generator import generate_airflow_dag
 from agent.generators.dbt_generator import generate_dbt_model
@@ -22,7 +23,11 @@ def main() -> None:
     parser.add_argument("--instructions", default="", help="extra free-text instructions")
     args = parser.parse_args()
 
-    result = GENERATORS[args.kind](args.table, args.out, args.instructions)
+    try:
+        result = GENERATORS[args.kind](args.table, args.out, args.instructions)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
     print(result)
 
 
