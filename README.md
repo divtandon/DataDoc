@@ -1,24 +1,21 @@
 # DataDoc
 
 A metadata-aware code generation agent built for [Build with DataHub: The
-Agent Hackathon](https://datahub.devpost.com/). DataDoc reads a dataset's
-real schema, lineage, and glossary context straight from DataHub via the
-**DataHub MCP Server** before generating dbt models, Airflow DAGs, or SQL
-migrations — so the output references real columns and real upstream tables
-instead of guessing.
+Agent Hackathon](https://datahub.devpost.com/).
 
-Where useful, it writes back to the DataHub graph too (e.g. tagging a column
-it's confident is PII), so the next person or agent inherits what it found.
+AI coding assistants are good at writing code, but when you ask one to write
+code against *your* database, it has no idea what your tables actually look
+like — it guesses at column names, guesses at what depends on what, and the
+output looks right until it isn't.
+
+DataDoc doesn't guess. Give it a table name and it reads the real schema,
+lineage, and glossary context straight from **DataHub** (via the DataHub MCP
+Server) before generating a single line of a dbt model, an Airflow DAG, or a
+SQL migration. When it notices something the catalog is missing — an
+undocumented column, a likely-PII field — it writes that back too, so the
+catalog gets better with every run instead of just being read from.
 
 ## How it works
-
-DataDoc drives the local **Claude Code CLI** via the Claude Agent SDK
-(`agent/core.py`), with the DataHub MCP server wired in as a tool source.
-The model decides what to look up and when, then writes the generated code
-to disk with Claude Code's built-in `Write` tool. This rides on your
-existing Claude Code/Pro subscription auth — no separate metered API key
-needed. See [docs/architecture.md](docs/architecture.md) for the full
-picture.
 
 ```
 CLI ──▶ agent/generators/*.py ──▶ agent/core.py (claude_agent_sdk.query)
@@ -26,6 +23,36 @@ CLI ──▶ agent/generators/*.py ──▶ agent/core.py (claude_agent_sdk.qu
                                         ├── DataHub MCP Server (schema, lineage, write-back)
                                         └── Claude Code's built-in Write tool
 ```
+
+DataDoc drives the local **Claude Code CLI** via the Claude Agent SDK
+(`agent/core.py`), with the DataHub MCP server wired in declaratively as a
+tool source (`ClaudeAgentOptions.mcp_servers`). The model decides what to
+look up and when — schema first, then lineage, then glossary terms — and
+writes the generated code to disk with Claude Code's built-in `Write` tool.
+This rides on your existing Claude Code/Pro subscription auth, not a
+separate metered API key. See [docs/architecture.md](docs/architecture.md)
+for the full picture, including why it's built this way.
+
+## Verified, not just claimed
+
+Everything below was actually run against a live DataHub instance and
+independently checked — not just described:
+
+- **Real generation, not templating.** Every file in `examples/` was
+  produced end-to-end by the agent against a live catalog; nothing was
+  hand-written after the fact. The output correctly reasons from lineage
+  (e.g. filtering test orders because the only downstream consumer is a
+  Finance-certified revenue rollup) and flags its own inferred assumptions
+  for reviewer sign-off instead of stating them as fact.
+- **Write-back confirmed independently.** Seeded a dataset with an
+  undocumented, PII-looking column, ran the agent, then queried DataHub's
+  GraphQL API directly (not the agent's own summary) and confirmed the
+  description it wrote actually persisted in `editableSchemaMetadata`.
+- **Refuses to fabricate.** Pointed at a table that doesn't exist in
+  DataHub, the agent searches, finds nothing, says so explicitly, and
+  writes no file — instead of inventing a plausible-looking schema.
+- **Reproducible from a clean setup**, including a from-scratch run in a
+  separate PowerShell session with no leftover state.
 
 ## Setup
 
@@ -52,9 +79,15 @@ No DataHub instance handy? Spin one up locally:
 pip install acryl-datahub
 datahub docker quickstart
 
-# seed a couple of realistic sample datasets (the built-in
+# seed the demo dataset pair (the built-in
 # `datahub docker ingest-sample-data` is broken in some CLI versions)
 python scripts/seed_local_sample_data.py
+
+# optional: extend it into a 4-hop lineage chain (nicer for screenshots/demos)
+python scripts/seed_richer_lineage.py
+
+# optional: seed a dataset with an undocumented/PII column, to test write-back
+python scripts/seed_writeback_test_data.py
 
 # in a separate terminal: mint a local token and start the MCP server
 python scripts/run_local_datahub_mcp.py
@@ -105,34 +138,36 @@ python cli.py airflow analytics.raw_orders --out dags/orders_ingest.py
 python cli.py migration analytics.raw_orders --out migrations/0001_add_region.sql
 ```
 
-Each run prints a summary of what DataHub context was used and where the
-file landed.
+Each run prints a summary of what DataHub context was used, what design
+decisions it made and why, and where the file landed.
 
 ## Project structure
 
 ```
 DataDoc/
 ├── agent/
-│   ├── core.py                # claude_agent_sdk query() wired to the DataHub MCP server
+│   ├── core.py                    # claude_agent_sdk query() wired to the DataHub MCP server
 │   ├── config.py
-│   ├── prompts/                # system prompt + codegen template
-│   └── generators/             # dbt / airflow / migration generators
-├── cli.py                      # entrypoint
+│   ├── prompts/                   # system prompt + codegen template
+│   └── generators/                # dbt / airflow / migration generators
+├── cli.py                         # entrypoint
 ├── scripts/
-│   ├── run_local_datahub_mcp.py  # bootstrap the MCP server against a local quickstart
-│   └── seed_local_sample_data.py # seed sample datasets for local dev
-├── examples/                   # sample generated artifacts
+│   ├── run_local_datahub_mcp.py     # bootstrap the MCP server against a local quickstart
+│   ├── seed_local_sample_data.py    # seed the core raw_orders / weekly_revenue_report pair
+│   ├── seed_richer_lineage.py       # extend that into a 4-hop lineage chain
+│   └── seed_writeback_test_data.py  # seed an undocumented/PII column to test write-back
+├── examples/                      # real generated artifacts (see examples/README.md)
 ├── tests/
-├── docs/architecture.md
-└── demo/script.md              # shot list for the submission video
+├── docs/architecture.md           # why it's built this way, known gaps
+└── demo/script.md                 # plain-English demo walkthrough for a non-technical audience
 ```
 
 ## Status
 
-Early scaffold — see [docs/architecture.md](docs/architecture.md#known-gaps--next-steps)
-for what's stubbed vs. real. Built for the DataHub Agent Hackathon
-("Metadata-Aware Code Generation & Development" track) and for my own
-learning.
+Built for the DataHub Agent Hackathon ("Metadata-Aware Code Generation &
+Development" track) and for my own learning — see
+[docs/architecture.md](docs/architecture.md#known-gaps--next-steps) for
+what's still rough around the edges.
 
 ## License
 
