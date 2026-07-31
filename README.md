@@ -63,6 +63,40 @@ python scripts/run_local_datahub_mcp.py
 Then set `DATAHUB_MCP_URL=http://127.0.0.1:8000/mcp` in `.env` (no token
 needed there — the local MCP HTTP transport isn't itself authenticated).
 
+### Starting everything back up (already set up once)
+
+Docker containers don't survive a reboot, so after restarting your machine
+you'll need three things running before `cli.py` works. Use three separate
+terminal windows:
+
+**1. Docker Desktop** — open it from the Start menu and wait until it says
+it's running.
+
+**2. DataHub itself:**
+```powershell
+cd C:\Users\divya\Desktop\DataDoc
+python -m datahub docker quickstart
+```
+This re-attaches to the existing containers (safe to run even if they're
+already up) and waits for them to become healthy. Confirm with:
+```powershell
+curl -UseBasicParsing http://localhost:9002
+```
+The UI itself is at **http://localhost:9002** (login: `datahub` / `datahub`).
+
+**3. The local MCP server** (leave this terminal open and running):
+```powershell
+cd C:\Users\divya\Desktop\DataDoc
+.\.mcpserver-venv\Scripts\python.exe scripts\run_local_datahub_mcp.py
+```
+You'll know it worked when you see `Uvicorn running on http://127.0.0.1:8000`.
+A browser check at `http://127.0.0.1:8000/health` should return `{"status":"ok"}`
+(visiting `http://127.0.0.1:8000/` directly will 404 — that's expected, the
+MCP endpoint only answers at `/mcp` over POST).
+
+**Then, in a fourth terminal**, activate the venv and run `cli.py` as usual
+(see Usage below).
+
 ## Usage
 
 ```bash
